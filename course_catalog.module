@@ -1,0 +1,807 @@
+<?php
+/**
+* Implements hook_block_info() to create blocks for assignment in admin>structure>blocks
+*/
+function course_catalog_block_info() {
+  $blocks = array();
+  $blocks['course_catalog_course_data'] = array(
+    'info' => t('Course Data'),
+  );
+  $blocks['course_catalog_program_pos'] = array(
+    'info' => t('Degree subpage - Plan of Study'),
+  );
+  $blocks['course_catalog_dep_courses'] = array(
+    'info' => t('Degree subpage - List of Courses'),
+  );
+  $blocks['course_catalog_required_courses'] = array(
+    'info' => t('Required Major Courses'),
+  );
+  $blocks['course_catalog_all_courses'] = array(
+    'info' => t('All College Courses'),
+  );
+  return $blocks;
+}
+
+
+/**
+ * Implements hook_menu() to create admin page and menu path.
+ */
+function course_catalog_menu() {
+  $items = array();
+
+  $items['admin/config/content/course_catalog'] = array(
+    'title' => 'Course Catalog',
+    'description' => 'Configuration for Course Catalog module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('course_catalog_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ * Page callback: Course Catalog settings
+ */
+function course_catalog_form($form, &$form_state) {
+  
+  //todo: get a list of catalogs available
+  
+  $form['course_catalog_cid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Default Catalog ID Number'),
+    '#default_value' => variable_get('course_catalog_cid', 7),
+    '#size' => 2,
+    '#maxlength' => 2,
+    '#description' => t('The Course Catalog ID to use in catalog lookups.'),
+    '#required' => TRUE,
+  );
+  $form['course_catalog_app_key'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Application Key'),
+    '#default_value' => variable_get('course_catalog_app_key', ''),
+    '#size' => 50,
+    '#maxlength' => 255,
+    '#description' => t('The application key provided by the registrar to access the catalog for your unit. format: 5c50645d25870812a1d8889fe5c7217093112c3d'),
+    '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+
+/**
+* Implements hook_block_view() to create the contents of the blocks when they are viewed.
+*/
+function course_catalog_block_view($delta = '') {
+  $block = array();
+  $cID = variable_get('course_catalog_cid', 7);
+  $appkey = variable_get('course_catalog_app_key', ''); //  catalog API key "PI (Polytechnic Institute)" for this application
+  
+  switch ($delta) {
+    case 'course_catalog_course_data':
+      if (isset($_GET['prefix']) && isset($_GET['number']) || isset($_GET['courseid'])) {
+        $course[0]->appkey = $appkey;
+        $course[0]->catalog = $cID;
+        if (isset($_GET["courseid"])) $course[0]->courseid = $_GET["courseid"];
+        if (isset($_GET["prefix"])) $course[0]->prefix = $_GET["prefix"];
+        if (isset($_GET["number"])) $course[0]->number = $_GET["number"];
+        $block['subject'] = '';
+        $block['content'] = _course_catalog_course_data_CONTENT($course);
+      } else {
+        $block['content'] =  "<h2>No course was requested</h2>";
+      }
+      break;
+    case 'course_catalog_program_pos':
+
+      $menuParent = menu_get_active_trail();
+      $menuParentPop = array_pop($menuParent);
+      $menuParent = end($menuParent);
+      if(!empty($menuParent) && $menuParent['link_path'] != ''){
+        $parentNode = $menuParent["link_path"];
+        $parentNode = substr($parentNode, strpos($parentNode, "/")+1);
+        $degreeNode = node_load($parentNode);
+        if (isset($degreeNode->field_course_catalog_id['und'][0]['value'])) {
+          $program[0]->poID = $degreeNode->field_course_catalog_id['und'][0]['value'];
+        } else {
+          $block['content'] = "This major does not have a semester based plan of study in the Purdue Course Catalog.";
+          break;
+        }
+      } elseif (isset($_GET['poID'])) {
+        $program[0]->poID = $_GET["poID"];
+      }
+      $program[0]->appkey = $appkey;
+      $program[0]->catalog = $cID;
+      $block['subject'] = "";
+      $block['content'] = _course_catalog_program_pos_CONTENT($program);
+      break;
+    case 'course_catalog_dep_courses':
+      $menuParent = menu_get_active_trail();
+      $menuParentPop = array_pop($menuParent);
+      $menuParent = end($menuParent);
+      if(!empty($menuParent) && $menuParent['link_path'] != ''){
+        $parentNode = $menuParent["link_path"];
+        $parentNode = substr($parentNode, strpos($parentNode, "/")+1);
+        $degreeNode = node_load($parentNode);
+        if (isset($degreeNode->field_course_catalog_id['und'][0]['value'])) {
+          $program[0]->poID = $degreeNode->field_course_catalog_id['und'][0]['value'];
+        }
+        else {
+          $block['subject'] = "";
+          $block['content'] = "There are no courses listed for this program in the catalog";
+          break;
+        }
+      } elseif (isset($_GET['poID'])) {
+        $program[0]->poID = $_GET["poID"];
+      }
+      $program[0]->appkey = $appkey;
+      $program[0]->catalog = $cID;
+      $block['subject'] = "";
+      $block['content'] = _course_catalog_dep_courses_CONTENT($program);
+      break;
+    case 'course_catalog_required_courses':
+      if (arg(0) == 'node') {
+        $nid = arg(1);
+      }
+      $node = node_load($nid);
+      if (isset($node->field_course_catalog_id['und'][0]['value'])){
+        $program[0]->poID = $node->field_course_catalog_id['und'][0]['value'];
+      } else {
+        $block['subject'] = "";
+        $block['content'] = "<p>The current course catalog does not list courses for this major.</p>";
+        break;
+      }
+      $program[0]->appkey = $appkey;
+      $program[0]->catalog = $cID;
+      $block['subject'] = "";
+      $block['content'] = _course_catalog_required_courses_CONTENT($program);
+      break;
+    case 'course_catalog_all_courses':
+      $program[0]->appkey = $appkey;
+      $program[0]->catalog = $cID;
+      $block['subject'] = "";
+      $block['content'] = _course_catalog_all_courses_CONTENT($program);
+      break;
+  }
+  return $block;
+}
+
+
+/**
+* use CURL to get the XML from the catalog source.
+*/
+function download_page($path){
+  $before = microtime(true);
+  
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL,$path);
+    curl_setopt($ch, CURLOPT_FAILONERROR,1);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION,0);
+    //curl_setopt($ch, CURLOPT_FOLLOWLOCATION,1);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    $retValue = curl_exec($ch);          
+    curl_close($ch);
+    $after = microtime(true);
+    //dpm(($after-$before) . " sec: " . $path);
+    return $retValue;
+}
+
+/**
+* get unique values from a multidimensial array
+*/
+function unique_multidim_array($array, $key) { 
+    $temp_array = array(); 
+    $i = 0; 
+    $key_array = array(); 
+    
+    foreach($array as $val) { 
+        if (!in_array($val[$key], $key_array)) { 
+            $key_array[$i] = $val[$key]; 
+            $temp_array[$i] = $val; 
+        } 
+        $i++; 
+    } 
+    return $temp_array; 
+} 
+
+
+function get_numeric($val) { 
+  if (is_numeric($val)) { 
+    return $val + 0; 
+  } 
+  return 0; 
+} 
+
+/**
+* get all departments with a catalog name
+* return all courses from departments using dept_courses
+*/
+function _course_catalog_all_courses_CONTENT($program){
+  $output = "";
+  $code = "";
+  $output = $output . "<p class='tright'><form action=''>Search for course number: <input type='text' size='5' name='code'><input type='submit' value='submit'>&nbsp;&nbsp;<span class='small-text text-polytechnic-medium-gray'>format: 10100</span>";
+  
+  $output = $output . "</form></p>";
+  /*fetch all departments with a poid identified*/
+  $departments_query = db_query("SELECT distinct field_course_catalog_name_value 
+    FROM field_data_field_course_catalog_name
+    order by field_course_catalog_name_value asc")->fetchAll();
+  $departmentscount = count($departments_query);
+  
+  /*if there is a search query, display results*/
+  if (isset($_GET['code']) && $_GET['code'] != "") {
+    $code = $_GET['code'];
+     /*save the department list to limit results to college courses only*/
+     $departmentlist = "";
+     for ($i = 0; $i < $departmentscount; $i++) {
+       $department = $departments_query[$i]->field_course_catalog_name_value;
+       $departmentlist = $departmentlist . "%20parent%3A%22" . str_replace(" ", "%20", $department) . "%22";
+     }
+     /*get the numeric value, convert it back to a string, and make it 5 characters*/
+     $code = get_numeric($code);
+     //dpm($code);
+     settype($code, "string");
+     $code = $code . "00000";
+     $code = substr($code, 0, 5);
+     //dpm($code);
+     /*get the program data xml from a content lookup*/
+    $sXML = download_page ('http://purdue.apis.acalog.com/v1/search/courses' .  
+      '?key=' . $program[0]->appkey .  
+      '&format=xml' .  
+      '&method=search' .  
+      '&catalog=' . $program[0]->catalog .  
+      '&query=' . str_replace(" ", "%20", $code) . 
+      $departmentlist .
+      '&options[sort]=alpha' . 
+      '&options[limit]=100' );
+    $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+    $x = 0;
+    //$resultcount = count($xml->search->results->result);
+    foreach ($xml->search->results->result as $result){
+      $courselist[$x]['courseid'] = $result->id;
+      $courselist[$x]['coursename'] = $result->altname;
+      $x = $x + 1;
+    }
+    $output = $output . "<p><a href='/courses'>< return to all courses</a></p>";
+    $output = $output . "<h4>Search results for: "  . $code .  "</h4>";
+    
+    $x = 0;
+    foreach ($courselist as $course) {
+      $output = $output . "<p>
+        <a href='/courses/course?courseid=" . $course['courseid'] . "' target='_blank'>" . 
+        $course['coursename'] . 
+        "</a></p>";
+        $x = $x + 1;
+    }
+    //dpm($x);
+    if ($x == 0) $output = $output . "there are no courses with that number";
+  
+  
+  } else { //if there isn't a search query, show all results.
+    
+    /*call the department courses function for each row to create a list of departments*/
+    for ($i = 0; $i < $departmentscount; $i++) {
+      $department = $departments_query[$i]->field_course_catalog_name_value;
+      $output = $output . "<p><a href='#" . str_replace(' ', '_', $department) . "'>" . $department . "</a></p>";
+    }
+    /*call the department courses function for each row to get the list of courses*/
+    for ($i = 0; $i < $departmentscount; $i++) {
+      $program[0]->departmentname = $departments_query[$i]->field_course_catalog_name_value; //set the program poid to the current row
+      $output = $output . _course_catalog_dep_courses_CONTENT($program); //get courses from the dep_courses function
+    }
+  }
+  return $output;
+}
+
+
+/**
+* search for the courses offered by the department that the degree is in, return HTML
+*/
+
+function _course_catalog_dep_courses_CONTENT($program){
+  $output = "";
+  if (isset($program[0]->departmentname)) {
+    /*if somethign sent the prograd department name, don't look it up*/
+    $programparent = $program[0]->departmentname;
+  } else {
+    /*get the program data xml from a content lookup*/
+    $sXML = download_page ('http://purdue.apis.acalog.com/v1/content' . 
+      '?key=' . $program[0]->appkey . 
+      '&format=xml' . 
+      '&method=getItems' . 
+      '&type=programs' . 
+      '&ids[]=' . $program[0]->poID .
+      '&catalog=' . $program[0]->catalog );
+    $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+    
+    /*get the program parent title to use as a search paramater and output later*/
+    $programparent = (string)$xml->programs->program->{'parent'}->children('xi', true)->{'include'}->fallback;
+  }
+ 
+  /*get the program data xml from a content lookup*/
+  $sXML = download_page ('http://purdue.apis.acalog.com/v1/search/courses' .  
+    '?key=' . $program[0]->appkey .  
+    '&format=xml' .  
+    '&method=search' .  
+    '&catalog=' . $program[0]->catalog .  
+    '&query=parent%3A%22' . str_replace(" ", "%20", $programparent) . '%22' .  
+    '&options[sort]=alpha' . 
+    '&options[limit]=0' );
+  $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+  $x = 0;
+  foreach ($xml->search->results->result as $result){
+    $courselist[$x]['courseid'] = $result->id;
+    $courselist[$x]['coursename'] = $result->altname;
+    $x = $x + 1;
+  }
+  
+  $output = $output . "<a name='" . str_replace(' ', '_', $programparent) . "'></a><h4>" . $programparent . " Undergraduate Courses</h4>";
+  foreach ($courselist as $course) {
+   $output = $output . "<p><a href='/courses/course?courseid=" . $course['courseid'] . "' target='_blank'>" . $course['coursename'] . "</a></p>";
+  }
+  return $output;
+  
+}
+  
+  
+/**
+* Get the Program Required Major Courses content and return HTML
+*/
+function _course_catalog_required_courses_CONTENT($program) {
+  $output = "";
+  /*get the program data xml from a content lookup*/
+  $sXML = download_page ('http://purdue.apis.acalog.com/v1/content' . 
+    '?key=' . $program[0]->appkey . 
+    '&format=xml' . 
+    '&method=getItems' . 
+    '&type=programs' . 
+    '&ids[]=' . $program[0]->poID .
+    '&catalog=' . $program[0]->catalog );
+  $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+  
+  /*get the major courses for the semester*/
+  $x = 0;
+  $course = array();
+  $corecount = count($xml->programs->program->cores->core);
+  //dpm($xml);
+  
+  //get the cores>core>courses version
+  if ($corecount >0) {
+    foreach ($xml->programs->program->cores->core as $core) {
+      $coretitle = -1;
+      $coretitle = (string)$core->children('a', true)->title;
+      $corepos = strpos($coretitle, "Required Major Courses");
+      if (is_int($corepos) == 1) {
+        foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
+          $coursepointer = (string)$courses['xpointer'];
+          $acalognumberstart = strpos($coursepointer, "'acalog-course-");
+          $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+          $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+          $course[$acalogcourseid]['courseid'] = $acalogcourseid;
+          $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title . "xx";
+          $x = $x + 1;
+        }
+      }
+    }
+  }
+
+    
+  
+  if ($corecount >0) {
+    //get the core>courses 
+    foreach( $xml->programs->program->cores->core->courses->children('xi', true)->{'include'} as $courses) {
+      
+      $coursepointer = (string)$courses['xpointer'];
+      $acalognumberstart = strpos($coursepointer, "'acalog-course-");
+      $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+      $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+      $course[$acalogcourseid]['courseid'] = $acalogcourseid;
+      $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
+      $x = $x + 1;
+      
+    }
+    //get the adhoc or values from core>children>core>courses and add them to the array
+    $childrencount = count($xml->programs->program->cores->core->courses->adhoc);
+    if ($childrencount > 0) {
+      foreach( $xml->programs->program->cores->core->courses->adhoc as $courses) {
+        if ((string)$courses->children('a', true)->title == "or") {
+          $courseid  = substr((string)$courses["course"], 14);
+          $course[$courseid]["right"] = "or";
+        }
+      }
+    }
+    
+    
+    //get the core>children>core>courses
+    $childrencount = count($xml->programs->program->cores->core->children);
+    
+    if ($childrencount > 0){
+      foreach( $xml->programs->program->cores->core->children->core as $core){
+        //dpm($childrencount);
+        //sometimes, important courses are listed int he concentration courses section, sometimes not.
+        if (strpos((string)$core->children('a', true)->title, "Major Courses") !== false || 
+        strpos((string)$core->children('a', true)->title, "Concentration Courses") !== false) {
+        foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
+          $coursepointer = (string)$courses['xpointer'];
+          $acalognumberstart = strpos($coursepointer, "'acalog-course-");
+          $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+          $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+          $course[$acalogcourseid]['courseid'] = $acalogcourseid;
+          $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
+          $x = $x + 1; 
+        }
+        }
+      }
+    }
+    
+    $childrencount = 0;
+    //dpm(__LINE__);
+    //$childrencount = count($xml->programs->program->cores->core->children->core->courses->adhoc);
+    //dpm(__LINE__);
+    if ($childrencount > 0) {
+      
+      //get the adhoc or values from core>children>core>courses and add them to the array
+      foreach( $xml->programs->program->cores->core->children->core->courses->adhoc as $courses) {
+        if ((string)$courses->children('a', true)->title == "or") {
+          $courseid  = substr((string)$courses["course"], 14);
+          $course[$courseid]["right"] = "or";
+        }
+      }
+    }
+    
+    //dpm($course);
+    
+    $eitheror = false;
+    /*build the html output for the block contents*/
+    $output = $output . "<div class='view-id-degree_page_content_blocks view-display-id-block_4'><table class='striped'>";
+    foreach ($course as $c) {
+      if ($eitheror == false){
+        $output = $output . "<tr><td>";
+      }
+      if ( $c["courseid"] == "na" ) {
+        $output = $output . "" . $c["coursename"] . "";
+      } else {
+        $output = $output . "<a href='/courses/course?courseid=" . $c["courseid"] . "' target='_blank'>" . $c["coursename"] . "</a>";
+      }
+      
+      if (isset($c["right"])) {
+        $output = $output . "<br/><em>or</em><br/>";
+        $eitheror = true;
+      } else {
+        $output = $output . "</tr></td>";
+        $eitheror = false;
+      }
+    }
+    $output = $output . "</table></div>";
+  } else {
+    $output = $output . "<p>There are no core courses listed for this program in the <a href='http://catalog.purdue.edu/index.php?catoid=" . $program[0]->catalog . "' target='_blank'>University Catalog</a></p>";
+  }
+  return $output;
+}
+
+
+/**
+* Get the Program Plan of Study content and return HTML
+*/
+function _course_catalog_program_pos_CONTENT($program) {
+  $semesterdata = array();
+  /*get the catalog list from a content lookup*/
+  $sXML = download_page('http://purdue.apis.acalog.com/v1/content' . 
+    '?key=' . $program[0]->appkey . 
+    '&format=xml' . 
+    '&method=getCatalogs');
+    
+  /*get the catalog name for the current catalog ID*/
+  $acalogcatalogID = "acalog-catalog-" . $program[0]->catalog; //
+  $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+  $posnotes = "<h2>Notes:</h2>";
+  $i=0;
+  foreach ( $xml->catalog as $catalog ) {
+    if ( (string)$catalog['id'] == $acalogcatalogID) {
+      //save the catalog name to a variable to output later
+      $catalogtitle = (string)$catalog[$i]->children('a', true)->title;
+      break;
+    }
+    $i = $i+1;
+  }
+  
+  /*get the program data xml from a content lookup*/
+  $sXML = download_page ('http://purdue.apis.acalog.com/v1/content' . 
+    '?key=' . $program[0]->appkey . 
+    '&format=xml' . 
+    '&method=getItems' . 
+    '&type=programs' . 
+    '&ids[]=' . $program[0]->poID .
+    '&catalog=' . $program[0]->catalog );
+  $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+  
+  /*find the core titled "Program Pequirements"*/
+  foreach ( $xml->programs->program->cores->core as $core ) {
+    if ($core->children('a', true)->title == "Program Requirements") {
+
+      /*get the list of semesters*/
+      foreach ( $core->children->core as $semesters ) {
+        $semesterid = (string)$semesters["id"];
+        $semester = (string)$semesters->children('a', true)->title;
+        $totalcreditsexist = count($semesters->children->core);
+        if ($totalcreditsexist > 0){
+          $semestercredithours = (string)$semesters->children->core->children('a', true)->title;
+        } else {
+          $semestercredithours = "n/a";
+        }
+        
+
+        
+        /*save the semester name and credit hours*/
+        //sometimes, the catalog folks put the notes section in a core semester element. 
+        //Let's ignore those for now. We need to finish this project this year.
+        if ($semester !== "Note") {
+          $semesterdata[$semesterid]["name"] = $semester;
+          $semesterdata[$semesterid]["credithours"] = $semestercredithours;
+        }
+        //get the xi courses
+        foreach ($semesters->courses->children('xi', true)->{'include'} as $course) {
+          $coursetitle = (string)$course->fallback->children('a', true)->title;
+          $coursepointer = (string)$course['xpointer'];
+          $acalognumberstart = strpos($coursepointer, "acalog-course-");
+          $acalognumberend = strpos($coursepointer, "'", $acalognumberstart);
+          $acalogcourseid = substr($coursepointer, $acalognumberstart, $acalognumberend-$acalognumberstart);
+          $semesterdata[$semesterid][$acalogcourseid]["coursetitle"] = $coursetitle;
+        }
+        
+        //on rare occasions, the courses are listed in the content region (without an adhoc parent)
+        if ($semesters->children('a', true)->content->children('h', true)->ul->li){
+          foreach ($semesters->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
+            $aftercourse = (string)$courselistitem;
+            //$semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
+            $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
+          }
+        }
+        
+        
+        //add the adhoc course to the semesterdata array
+        foreach ($semesters->courses->adhoc as $adhoc) {
+          
+          $licourse = "";
+          //if the position is before
+          if ((string)$adhoc["position"] == "before") {
+            $adhoctitle = (string)$adhoc->children('a', true)->title;
+            $acalogcourseid = (string)$adhoc['course'];
+            //Usually, the courses are listed in a ul>li structure.
+            if ($adhoc->children('a', true)->content->children('h', true)->ul->li){
+              foreach ($adhoc->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
+                $aftercourse = (string)$courselistitem;
+                $semesterdata[$semesterid][$acalogcourseid]["before"][] = $aftercourse;
+              }
+            }
+            //sometimes, the courses are listed in a p tag.
+            if ($adhoc->children('a', true)->content->children('h', true)->p){
+              foreach ($adhoc->children('a', true)->content->children('h', true)->p as $courselistitem) {
+                $aftercourse = (string)$courselistitem;
+                $semesterdata[$semesterid][$acalogcourseid]["before"][] = $aftercourse;
+              }
+            }
+            //dpm($semesterdata);
+          }
+          
+          
+          //if the position is right
+          if ((string)$adhoc["position"] == "right") {
+            $adhoctitle = (string)$adhoc->children('a', true)->title;
+            $acalogcourseid = (string)$adhoc['course'];
+            $semesterdata[$semesterid][$acalogcourseid]["right"][] = $adhoctitle;
+          }
+          
+          $licourse = "";
+          //if the position is after
+          if ((string)$adhoc["position"] == "after") {
+            $adhoctitle = (string)$adhoc->children('a', true)->title;
+            $acalogcourseid = (string)$adhoc['course'];
+            //Usually, the courses are listed in a ul>li structure.
+            if ($adhoc->children('a', true)->content->children('h', true)->ul->li){
+              foreach ($adhoc->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
+                $aftercourse = (string)$courselistitem;
+                $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
+              }
+            }
+            //sometimes, the courses are listed in a p tag.
+            if ($adhoc->children('a', true)->content->children('h', true)->p){
+              foreach ($adhoc->children('a', true)->content->children('h', true)->p as $courselistitem) {
+                $aftercourse = (string)$courselistitem;
+                $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    //save all of the notes. Sometimes they call them notes, sometimes note. lol.
+    if ($core->children('a', true)->title == "Note" || $core->children('a', true)->title == "Notes") {
+      foreach ( $core->children('a', true)->content->children('h', true)->p as $pvalue ) {
+        $posnotes = $posnotes . "<p>" . (string)$pvalue . "</p>";
+      }
+    }
+    
+  }
+
+  //if there is a critical course note, include it.
+  foreach ($xml->sharedcores->core as $core) {
+    if ((string)$core->children('a', true)->title == "Critical Course") {
+      $posnotes = $posnotes . "<p>&diams; The course is considered critical. A Critical Course is one that a student must be able to pass to persist and succeed in a particular major.</p>";
+    }
+  }
+  
+  /* save the program title for output*/
+  $programtitle = (string)$xml->programs->program->children('a', true)->title;
+  
+    
+  /*build the html output for the block contents*/
+  $output = "";
+  $output = $output . "<h2>" . $programtitle . "</h2>";
+  $semestercount = count($semesterdata);
+  if (count($semesterdata) < 1) {
+    $output = $output . "The <a href='http://catalog.purdue.edu/preview_program.php" . 
+    "?catoid=" . $program[0]->catalog . 
+    "&poid=" . $program[0]->poID . 
+    "' target='_blank'>" . $catalogtitle . "</a> does not have a semester based plan of study for this program.";
+  } else {
+    $output = $output . "<p>This sample plan of study is from the " . $catalogtitle . ".</p>";
+    foreach ($semesterdata as $semester){
+      $output = $output . "<h2>" . $semester["name"] . "</h2>";
+      $output = $output . "<table class='striped lined bordered'>";
+      
+      //dpm($semester);
+      $eitheroroption = false;
+      foreach ($semester as $key=>$acalogcourse) {
+        
+        if (is_array($acalogcourse)) {
+          
+          //if there is an "before" element array, output all of before courses.
+          if (isset($acalogcourse["before"][0])) {
+            foreach ($acalogcourse["before"] as $before){
+              $output = $output . "<tr><td>" . scrub_course_title($before) . "</tr></td>";
+            }
+            
+          }
+          
+          //sometimes the catalog lists all of the items in a content section with
+          //us>li sections with no courses.
+          //if there isn't a course title, just ignore it.
+          if (isset($acalogcourse["coursetitle"])) {
+          
+            //if it's an either or option, don't output a new row
+            if ($eitheroroption == false) {
+              $output = $output . "<tr><td>";
+            } else {
+              $output = $output . "<br>";
+            }
+            
+            //output the acalog course link and title
+            $output = $output . "<a href='/courses/course?courseid=" . substr($key,14) . "' target='_blank'>";
+            $output = $output . scrub_course_title($acalogcourse["coursetitle"]);
+            $output = $output . "</a>";
+            
+            
+            
+            //if there is a right attribute, find all of the right attributes and list them.
+            //Most of the time, all of the right attributes are listed in the same element. 
+            //Sometimes there are multiple right elements for the same course.
+            //The registrar is very tricky. They almost succeeded, but not quite.
+            if (isset($acalogcourse["right"][0])) {
+              $rightattribute = "";
+              //put all of the right elements together into a string
+              foreach ($acalogcourse["right"] as $rightattributevalue){
+                $rightattribute = $rightattribute . " " . $rightattributevalue;
+              }
+              $output = $output . " " . $rightattribute;
+            } else {
+              $rightattribute = "";
+            }
+            //if the right attribute includes the string "or", don't close the 
+            //table data/row and set the either or option to true
+            if (strpos($rightattribute, "or") !== false) {
+              $eitheroroption = true;
+            } else {
+              $output = $output . "</tr></td>";
+              $eitheroroption = false;
+            }
+          }
+          //if there is an "after" element array, output all of after courses.
+          if (isset($acalogcourse["after"][0])) {
+            foreach ($acalogcourse["after"] as $after){
+              //sometimes, a note item is listed in the after attribute instead of right, 
+              //so don't show it because it is in it's own row.
+              if (strlen($after) > 0) $output = $output . "<tr><td>" . scrub_course_title($after) . "</tr></td>";
+            }
+            
+          }
+        }
+      }
+      $output = $output . "</table>";
+      
+      //sometimes, there is a "total credits" section at the end of the cores. 
+      //when this happens, we still list it as a core when we loop through, but 
+      //the total credits count isn't available because it doesn't make sense.
+      //if there isn't a semester credit hour total, don't display the total.
+      if ($semester["credithours"] !== "n/a"){
+        $output = $output . "<p class='tright'>Total: " . $semester["credithours"] . "</p>"; 
+      }
+    } //end semester sections
+    
+    $output = $output . $posnotes; //add notes
+    
+    //add links to the catalog and mypurdue for complete information
+    $output = $output . "<p>For complete program details visit the 
+      <a href='http://catalog.purdue.edu/preview_program.php" . 
+      "?catoid=" . $program[0]->catalog . 
+      "&poid=" . $program[0]->poID . 
+      "'>" . $catalogtitle . "</a></p>";
+    $output = $output . "<p>For selective and elective courses that meet program requirements, visit " . 
+      "<a href='https://purdue.edu/registrar/currentStudents/myPurdue/index.html' target='_blank'>" . 
+      "myPurduePlan</a></p>";
+  }
+
+  return $output;
+}
+/**
+* scrub the output of course titles for bracketed crap.
+*/
+function scrub_course_title($title) {
+  $output = preg_replace('/[\[{\(].*[\]}\)]/U' , '', $title);
+  return $output;
+}
+
+/**
+* Get the course data and return HTML
+*/
+function _course_catalog_course_data_CONTENT($course) {
+  
+  if ($course[0]->courseid == "") {
+    /*get the course ID from a catalog search*/
+    $sXML = download_page ('http://purdue.apis.acalog.com/v1/search/courses' . 
+      '?key=' . $course[0]->appkey . 
+      '&format=xml' . 
+      '&method=search' . 
+      '&catalog=' . $course[0]->catalog . 
+      '&query=prefix%3A' . $course[0]->prefix . '%20code%3A' . $course[0]->number);
+    $xml = new SimpleXMLElement($sXML);
+    $course[0]->courseid = $xml->search->results->result->id;
+  }
+  /*get the course data xml from a catalog content lookup*/
+  $sXML = download_page ('http://purdue.apis.acalog.com/v1/content' . 
+    '?key=' . $course[0]->appkey . 
+    '&format=xml' . 
+    '&method=getItems' . 
+    '&type=courses' . 
+    '&ids[]=' . $course[0]->courseid . 
+    '&catalog=' . $course[0]->catalog);
+
+  /*set up the XML source so we can access the values*/
+  $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+  
+  /* save the variables we'll need for the output*/
+  $courseprefix = (string)$xml->courses->course->children('a', true)->content->children('', true)->prefix;
+  $coursecode = (string)$xml->courses->course->children('a', true)->content->children('', true)->code;
+  $coursename = (string)$xml->courses->course->children('a', true)->content->children('', true)->name;
+  $i=0;
+  foreach ( $xml->courses->course->children('a', true)->content->children('', true)->field as $field ) {
+    if ( (string)$field['type'] == 'acalog-field-115') {
+      $coursedescription = (string)$field->data->children('h', true)->p;
+      break;
+    }
+    $i = $i+1;
+  }
+  $coursedepartment = (string)$xml->hierarchy->entity->children('a', true)->title;
+  
+  /*build the html output for the block contents*/
+  $output = "<h1>" . $courseprefix . " " . $coursecode . "</h1>";
+  $output = $output . "<h2>" . $coursename . "</h2>";
+  $output = $output . "<p>" . $coursedescription . "</p>";
+  $output = $output . "<p>This course is offered by the " . $coursedepartment . "</p>";
+  
+  return $output;
+}
+
