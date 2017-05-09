@@ -184,7 +184,7 @@ function download_page($path){
     $retValue = curl_exec($ch);          
     curl_close($ch);
     $after = microtime(true);
-    //dpm(($after-$before) . " sec: " . $path);
+    dpm(($after-$before) . " sec: " . $path);
     return $retValue;
 }
 
@@ -226,7 +226,7 @@ function _course_catalog_all_courses_CONTENT($program){
   $output = $output . "</form></p>";
   /*fetch all departments with a poid identified*/
   $departments_query = db_query("SELECT distinct field_course_catalog_name_value 
-    FROM field_data_field_course_catalog_name
+    FROM cotpolytst01.field_data_field_course_catalog_name
     order by field_course_catalog_name_value asc")->fetchAll();
   $departmentscount = count($departments_query);
   
@@ -380,7 +380,7 @@ function _course_catalog_required_courses_CONTENT($program) {
           $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
           $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
           $course[$acalogcourseid]['courseid'] = $acalogcourseid;
-          $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title . "xx";
+          $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title . "";
           $x = $x + 1;
         }
       }
@@ -621,7 +621,7 @@ function _course_catalog_program_pos_CONTENT($program) {
     //save all of the notes. Sometimes they call them notes, sometimes note. lol.
     if ($core->children('a', true)->title == "Note" || $core->children('a', true)->title == "Notes") {
       foreach ( $core->children('a', true)->content->children('h', true)->p as $pvalue ) {
-        $posnotes = $posnotes . "<p>" . (string)$pvalue . "</p>";
+        $posnotes = $posnotes . "<p style='white-space: pre;'>" . (string)$pvalue . "</p>";
       }
     }
     
