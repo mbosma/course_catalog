@@ -7,5 +7,5 @@ configure = admin/config/content/course_catalog
 ; Information added by Matt on 2016-12-09
 version = "7.x-1.x-dev"
 core = "7.x"
-project = "course_catalog"
+dependencies[] = nodehierarchy:nodehierarchy
 datestamp = "1481301114"
