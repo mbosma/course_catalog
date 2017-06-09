@@ -184,9 +184,10 @@ function download_page($path){
     $retValue = curl_exec($ch);          
     curl_close($ch);
     $after = microtime(true);
-    dpm(($after-$before) . " sec: " . $path);
+    //dpm(($after-$before) . " sec: " . $path);
     return $retValue;
 }
+
 
 /**
 * get unique values from a multidimensial array
@@ -207,13 +208,6 @@ function unique_multidim_array($array, $key) {
 } 
 
 
-function get_numeric($val) { 
-  if (is_numeric($val)) { 
-    return $val + 0; 
-  } 
-  return 0; 
-} 
-
 /**
 * get all departments with a catalog name
 * return all courses from departments using dept_courses
@@ -226,27 +220,27 @@ function _course_catalog_all_courses_CONTENT($program){
   $output = $output . "</form></p>";
   /*fetch all departments with a poid identified*/
   $departments_query = db_query("SELECT distinct field_course_catalog_name_value 
-    FROM cotpolytst01.field_data_field_course_catalog_name
+    FROM field_data_field_course_catalog_name
     order by field_course_catalog_name_value asc")->fetchAll();
   $departmentscount = count($departments_query);
   
   /*if there is a search query, display results*/
   if (isset($_GET['code']) && $_GET['code'] != "") {
     $code = $_GET['code'];
-     /*save the department list to limit results to college courses only*/
-     $departmentlist = "";
-     for ($i = 0; $i < $departmentscount; $i++) {
-       $department = $departments_query[$i]->field_course_catalog_name_value;
-       $departmentlist = $departmentlist . "%20parent%3A%22" . str_replace(" ", "%20", $department) . "%22";
-     }
-     /*get the numeric value, convert it back to a string, and make it 5 characters*/
-     $code = get_numeric($code);
-     //dpm($code);
-     settype($code, "string");
-     $code = $code . "00000";
-     $code = substr($code, 0, 5);
-     //dpm($code);
-     /*get the program data xml from a content lookup*/
+    /*save the department list to limit results to college courses only*/
+    $departmentlist = "";
+    for ($i = 0; $i < $departmentscount; $i++) {
+     $department = $departments_query[$i]->field_course_catalog_name_value;
+     $departmentlist = $departmentlist . "%20parent%3A%22" . str_replace(" ", "%20", $department) . "%22";
+    }
+    /*get the numeric value, convert it back to a string, and make it 5 characters*/
+    $code = get_numeric($code);
+    //dpm($code);
+    settype($code, "string");
+    $code = $code . "00000";
+    $code = substr($code, 0, 5);
+    //dpm($code);
+    /*get the program data xml from a content lookup*/
     $sXML = download_page ('http://purdue.apis.acalog.com/v1/search/courses' .  
       '?key=' . $program[0]->appkey .  
       '&format=xml' .  
@@ -256,41 +250,45 @@ function _course_catalog_all_courses_CONTENT($program){
       $departmentlist .
       '&options[sort]=alpha' . 
       '&options[limit]=100' );
-    $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
-    $x = 0;
-    //$resultcount = count($xml->search->results->result);
-    foreach ($xml->search->results->result as $result){
-      $courselist[$x]['courseid'] = $result->id;
-      $courselist[$x]['coursename'] = $result->altname;
-      $x = $x + 1;
-    }
-    $output = $output . "<p><a href='/courses'>< return to all courses</a></p>";
-    $output = $output . "<h4>Search results for: "  . $code .  "</h4>";
-    
-    $x = 0;
-    foreach ($courselist as $course) {
-      $output = $output . "<p>
-        <a href='/courses/course?courseid=" . $course['courseid'] . "' target='_blank'>" . 
-        $course['coursename'] . 
-        "</a></p>";
+    $testxml = simplexml_load_string($sXML);
+    if ($testxml == false) {
+      $output = "<p>There was an error retrieving the content</p>";
+      } else {  
+      $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+      $x = 0;
+      //$resultcount = count($xml->search->results->result);
+      foreach ($xml->search->results->result as $result){
+        $courselist[$x]['courseid'] = $result->id;
+        $courselist[$x]['coursename'] = $result->altname;
         $x = $x + 1;
+      }
+      $output = $output . "<p><a href='/courses'>< return to all courses</a></p>";
+      $output = $output . "<h4>Search results for: "  . $code .  "</h4>";
+      
+      $x = 0;
+      foreach ($courselist as $course) {
+        $output = $output . "<p>
+          <a href='/courses/course?courseid=" . $course['courseid'] . "' target='_blank'>" . 
+          $course['coursename'] . 
+          "</a></p>";
+          $x = $x + 1;
+      }
+      //dpm($x);
+      if ($x == 0) $output = $output . "there are no courses with that number";
     }
-    //dpm($x);
-    if ($x == 0) $output = $output . "there are no courses with that number";
-  
-  
+
   } else { //if there isn't a search query, show all results.
     
-    /*call the department courses function for each row to create a list of departments*/
-    for ($i = 0; $i < $departmentscount; $i++) {
-      $department = $departments_query[$i]->field_course_catalog_name_value;
-      $output = $output . "<p><a href='#" . str_replace(' ', '_', $department) . "'>" . $department . "</a></p>";
-    }
-    /*call the department courses function for each row to get the list of courses*/
-    for ($i = 0; $i < $departmentscount; $i++) {
-      $program[0]->departmentname = $departments_query[$i]->field_course_catalog_name_value; //set the program poid to the current row
-      $output = $output . _course_catalog_dep_courses_CONTENT($program); //get courses from the dep_courses function
-    }
+  /*call the department courses function for each row to create a list of departments*/
+  for ($i = 0; $i < $departmentscount; $i++) {
+    $department = $departments_query[$i]->field_course_catalog_name_value;
+    $output = $output . "<p><a href='#" . str_replace(' ', '_', $department) . "'>" . $department . "</a></p>";
+  }
+  /*call the department courses function for each row to get the list of courses*/
+  for ($i = 0; $i < $departmentscount; $i++) {
+    $program[0]->departmentname = $departments_query[$i]->field_course_catalog_name_value; //set the program poid to the current row
+    $output = $output . _course_catalog_dep_courses_CONTENT($program); //get courses from the dep_courses function
+  }
   }
   return $output;
 }
@@ -299,7 +297,6 @@ function _course_catalog_all_courses_CONTENT($program){
 /**
 * search for the courses offered by the department that the degree is in, return HTML
 */
-
 function _course_catalog_dep_courses_CONTENT($program){
   $output = "";
   if (isset($program[0]->departmentname)) {
@@ -342,7 +339,6 @@ function _course_catalog_dep_courses_CONTENT($program){
    $output = $output . "<p><a href='/courses/course?courseid=" . $course['courseid'] . "' target='_blank'>" . $course['coursename'] . "</a></p>";
   }
   return $output;
-  
 }
   
   
@@ -359,124 +355,159 @@ function _course_catalog_required_courses_CONTENT($program) {
     '&type=programs' . 
     '&ids[]=' . $program[0]->poID .
     '&catalog=' . $program[0]->catalog );
-  $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
-  
-  /*get the major courses for the semester*/
-  $x = 0;
-  $course = array();
-  $corecount = count($xml->programs->program->cores->core);
-  //dpm($xml);
-  
-  //get the cores>core>courses version
-  if ($corecount >0) {
-    foreach ($xml->programs->program->cores->core as $core) {
-      $coretitle = -1;
-      $coretitle = (string)$core->children('a', true)->title;
-      $corepos = strpos($coretitle, "Required Major Courses");
-      if (is_int($corepos) == 1) {
-        foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
-          $coursepointer = (string)$courses['xpointer'];
-          $acalognumberstart = strpos($coursepointer, "'acalog-course-");
-          $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
-          $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
-          $course[$acalogcourseid]['courseid'] = $acalogcourseid;
-          $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title . "";
-          $x = $x + 1;
-        }
-      }
-    }
-  }
-
-    
-  
-  if ($corecount >0) {
-    //get the core>courses 
-    foreach( $xml->programs->program->cores->core->courses->children('xi', true)->{'include'} as $courses) {
-      
-      $coursepointer = (string)$courses['xpointer'];
-      $acalognumberstart = strpos($coursepointer, "'acalog-course-");
-      $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
-      $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
-      $course[$acalogcourseid]['courseid'] = $acalogcourseid;
-      $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
-      $x = $x + 1;
-      
-    }
-    //get the adhoc or values from core>children>core>courses and add them to the array
-    $childrencount = count($xml->programs->program->cores->core->courses->adhoc);
-    if ($childrencount > 0) {
-      foreach( $xml->programs->program->cores->core->courses->adhoc as $courses) {
-        if ((string)$courses->children('a', true)->title == "or") {
-          $courseid  = substr((string)$courses["course"], 14);
-          $course[$courseid]["right"] = "or";
-        }
-      }
-    }
-    
-    
-    //get the core>children>core>courses
-    $childrencount = count($xml->programs->program->cores->core->children);
-    
-    if ($childrencount > 0){
-      foreach( $xml->programs->program->cores->core->children->core as $core){
-        //dpm($childrencount);
-        //sometimes, important courses are listed int he concentration courses section, sometimes not.
-        if (strpos((string)$core->children('a', true)->title, "Major Courses") !== false || 
-        strpos((string)$core->children('a', true)->title, "Concentration Courses") !== false) {
-        foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
-          $coursepointer = (string)$courses['xpointer'];
-          $acalognumberstart = strpos($coursepointer, "'acalog-course-");
-          $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
-          $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
-          $course[$acalogcourseid]['courseid'] = $acalogcourseid;
-          $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
-          $x = $x + 1; 
-        }
-        }
-      }
-    }
-    
-    $childrencount = 0;
-    //dpm(__LINE__);
-    //$childrencount = count($xml->programs->program->cores->core->children->core->courses->adhoc);
-    //dpm(__LINE__);
-    if ($childrencount > 0) {
-      
-      //get the adhoc or values from core>children>core>courses and add them to the array
-      foreach( $xml->programs->program->cores->core->children->core->courses->adhoc as $courses) {
-        if ((string)$courses->children('a', true)->title == "or") {
-          $courseid  = substr((string)$courses["course"], 14);
-          $course[$courseid]["right"] = "or";
-        }
-      }
-    }
-    
-    //dpm($course);
-    
-    $eitheror = false;
-    /*build the html output for the block contents*/
-    $output = $output . "<div class='view-id-degree_page_content_blocks view-display-id-block_4'><table class='striped'>";
-    foreach ($course as $c) {
-      if ($eitheror == false){
-        $output = $output . "<tr><td>";
-      }
-      if ( $c["courseid"] == "na" ) {
-        $output = $output . "" . $c["coursename"] . "";
-      } else {
-        $output = $output . "<a href='/courses/course?courseid=" . $c["courseid"] . "' target='_blank'>" . $c["coursename"] . "</a>";
-      }
-      
-      if (isset($c["right"])) {
-        $output = $output . "<br/><em>or</em><br/>";
-        $eitheror = true;
-      } else {
-        $output = $output . "</tr></td>";
-        $eitheror = false;
-      }
-    }
-    $output = $output . "</table></div>";
+  $testxml = simplexml_load_string($sXML);
+  if ($testxml == false) {
+    $output = "<p>There was an error retrieving the core course content</p>";
   } else {
-    $output = $output . "<p>There are no core courses listed for this program in the <a href='http://catalog.purdue.edu/index.php?catoid=" . $program[0]->catalog . "' target='_blank'>University Catalog</a></p>";
+    $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
+    //dpm ($xml);
+    /*get the major courses for the semester*/
+    $x = 0;
+    $course = array();
+    $corecount = count($xml->programs->program->cores->core);
+
+    //get the cores>core>courses version
+    if ($corecount >0) {
+
+      foreach ($xml->programs->program->cores->core as $core) {
+        $coretitle = -1;
+        $coretitle = (string)$core->children('a', true)->title;
+        $corepos = strpos($coretitle, "Major Courses");
+        if (is_int($corepos) > 0) {
+          foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
+            $coursepointer = (string)$courses['xpointer'];
+            $acalognumberstart = strpos($coursepointer, "'acalog-course-");
+            $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+            $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+            $course[$acalogcourseid]['courseid'] = $acalogcourseid;
+            $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title . "";
+            $x = $x + 1;
+          }
+        }
+      }
+    }
+
+    if ($corecount >0) {
+      //get the core>courses 
+      foreach( $xml->programs->program->cores->core->courses->children('xi', true)->{'include'} as $courses) {
+        
+        $coursepointer = (string)$courses['xpointer'];
+        $acalognumberstart = strpos($coursepointer, "'acalog-course-");
+        $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+        $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+        $course[$acalogcourseid]['courseid'] = $acalogcourseid;
+        $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
+        $x = $x + 1;
+        
+      }
+      //get the adhoc or values from core>children>core>courses and add them to the array
+      $childrencount = count($xml->programs->program->cores->core->courses->adhoc);
+      if ($childrencount > 0) {
+        foreach( $xml->programs->program->cores->core->courses->adhoc as $courses) {
+          if ((string)$courses->children('a', true)->title == "or") {
+            $courseid  = substr((string)$courses["course"], 14);
+            $course[$courseid]["right"] = "or";
+          }
+        }
+      }
+      
+      
+      //=========================
+      //get the core>children>core>courses
+      $childrencount = count($xml->programs->program->cores->core);
+
+      if ($childrencount > 0){
+        foreach( $xml->programs->program->cores->core as $coretest){
+          $corechildcount = count($coretest->children->core);
+          if ($corechildcount > 0) {
+            $core = $coretest->children->core;          
+            // Very inconsistent data structures on this one. Uses courses that are identified as:
+            //  - Major Courses, Required Department courses, or Concentration Courses
+            if (strpos((string)$core->children('a', true)->title, "Major Courses") !== false || 
+            strpos((string)$core->children('a', true)->title, "Required Department Courses") !== false || 
+              strpos((string)$core->children('a', true)->title, "Concentration Courses") !== false) {
+
+              foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
+                $coursepointer = (string)$courses['xpointer'];
+                $acalognumberstart = strpos($coursepointer, "'acalog-course-");
+                $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+                $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+                $course[$acalogcourseid]['courseid'] = $acalogcourseid;
+                $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
+                $x = $x + 1; 
+              }
+            }
+          }
+        }
+      }
+      
+      //=========================
+      
+      
+      //get the core>children>core>courses
+      $childrencount = count($xml->programs->program->cores->core->children);
+
+      if ($childrencount > 0){
+        foreach( $xml->programs->program->cores->core->children->core as $core){
+          
+          //sometimes, important courses are listed in the concentration courses section, sometimes not.
+          if (strpos((string)$core->children('a', true)->title, "Major Courses") !== false || 
+          strpos((string)$core->children('a', true)->title, "Concentration Courses") !== false) {
+          foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
+            $coursepointer = (string)$courses['xpointer'];
+            $acalognumberstart = strpos($coursepointer, "'acalog-course-");
+            $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+            $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+            $course[$acalogcourseid]['courseid'] = $acalogcourseid;
+            $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
+            $x = $x + 1; 
+          }
+          }
+        }
+      }
+      
+      $childrencount = 0;
+      //dpm(__LINE__);
+      //$childrencount = count($xml->programs->program->cores->core->children->core->courses->adhoc);
+      //dpm(__LINE__);
+      if ($childrencount > 0) {
+        
+        //get the adhoc or values from core>children>core>courses and add them to the array
+        foreach( $xml->programs->program->cores->core->children->core->courses->adhoc as $courses) {
+          if ((string)$courses->children('a', true)->title == "or") {
+            $courseid  = substr((string)$courses["course"], 14);
+            $course[$courseid]["right"] = "or";
+          }
+        }
+      }
+      
+      //dpm($course);
+      
+      $eitheror = false;
+      /*build the html output for the block contents*/
+      $output = $output . "<div class='view-id-degree_page_content_blocks view-display-id-block_4'><table class='striped'>";
+      foreach ($course as $c) {
+        if ($eitheror == false){
+          $output = $output . "<tr><td>";
+        }
+        if ( $c["courseid"] == "na" ) {
+          $output = $output . "" . $c["coursename"] . "";
+        } else {
+          $output = $output . "<a href='/courses/course?courseid=" . $c["courseid"] . "' target='_blank'>" . $c["coursename"] . "</a>";
+        }
+        
+        if (isset($c["right"])) {
+          $output = $output . "<br/><em>or</em><br/>";
+          $eitheror = true;
+        } else {
+          $output = $output . "</tr></td>";
+          $eitheror = false;
+        }
+      }
+      $output = $output . "</table></div>";
+    } else {
+      $output = $output . "<p>There are no core courses listed for this program in the <a href='http://catalog.purdue.edu/index.php?catoid=" . $program[0]->catalog . "' target='_blank'>University Catalog</a></p>";
+    }
   }
   return $output;
 }
@@ -519,98 +550,109 @@ function _course_catalog_program_pos_CONTENT($program) {
   
   /*find the core titled "Program Pequirements"*/
   foreach ( $xml->programs->program->cores->core as $core ) {
-    if ($core->children('a', true)->title == "Program Requirements") {
+    //usually, the semesters are called "Program Requirements"
+    //sometimes, they are called "Degree Requirements", which is confusing, because there is almost always another section that's also called degree requirements. 
+    if ($core->children('a', true)->title == "Program Requirements" || $core->children('a', true)->title == "Degree Requirements") {
+      //if there are children semesters
+      if (count($core->children->core) > 0 ) {
+        /*get the list of semesters*/
+        foreach ( $core->children->core as $semesters ) {
+          $semesternametest = (string)$semesters->children('a', true)->title;
+          if (strpos($semesternametest, "Departmental") !== false) {  
+            //this is not a semester        
+          } else {
+              $semesterid = (string)$semesters["id"];
+            $semester = (string)$semesters->children('a', true)->title;
 
-      /*get the list of semesters*/
-      foreach ( $core->children->core as $semesters ) {
-        $semesterid = (string)$semesters["id"];
-        $semester = (string)$semesters->children('a', true)->title;
-        $totalcreditsexist = count($semesters->children->core);
-        if ($totalcreditsexist > 0){
-          $semestercredithours = (string)$semesters->children->core->children('a', true)->title;
-        } else {
-          $semestercredithours = "n/a";
-        }
-        
-
-        
-        /*save the semester name and credit hours*/
-        //sometimes, the catalog folks put the notes section in a core semester element. 
-        //Let's ignore those for now. We need to finish this project this year.
-        if ($semester !== "Note") {
-          $semesterdata[$semesterid]["name"] = $semester;
-          $semesterdata[$semesterid]["credithours"] = $semestercredithours;
-        }
-        //get the xi courses
-        foreach ($semesters->courses->children('xi', true)->{'include'} as $course) {
-          $coursetitle = (string)$course->fallback->children('a', true)->title;
-          $coursepointer = (string)$course['xpointer'];
-          $acalognumberstart = strpos($coursepointer, "acalog-course-");
-          $acalognumberend = strpos($coursepointer, "'", $acalognumberstart);
-          $acalogcourseid = substr($coursepointer, $acalognumberstart, $acalognumberend-$acalognumberstart);
-          $semesterdata[$semesterid][$acalogcourseid]["coursetitle"] = $coursetitle;
-        }
-        
-        //on rare occasions, the courses are listed in the content region (without an adhoc parent)
-        if ($semesters->children('a', true)->content->children('h', true)->ul->li){
-          foreach ($semesters->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
-            $aftercourse = (string)$courselistitem;
-            //$semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
-            $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
-          }
-        }
-        
-        
-        //add the adhoc course to the semesterdata array
-        foreach ($semesters->courses->adhoc as $adhoc) {
-          
-          $licourse = "";
-          //if the position is before
-          if ((string)$adhoc["position"] == "before") {
-            $adhoctitle = (string)$adhoc->children('a', true)->title;
-            $acalogcourseid = (string)$adhoc['course'];
-            //Usually, the courses are listed in a ul>li structure.
-            if ($adhoc->children('a', true)->content->children('h', true)->ul->li){
-              foreach ($adhoc->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
-                $aftercourse = (string)$courselistitem;
-                $semesterdata[$semesterid][$acalogcourseid]["before"][] = $aftercourse;
-              }
+            $totalcreditsexist = count($semesters->children->core);
+            if ($totalcreditsexist > 0){
+              $semestercredithours = (string)$semesters->children->core->children('a', true)->title;
+            } else {
+              $semestercredithours = "n/a";
             }
-            //sometimes, the courses are listed in a p tag.
-            if ($adhoc->children('a', true)->content->children('h', true)->p){
-              foreach ($adhoc->children('a', true)->content->children('h', true)->p as $courselistitem) {
-                $aftercourse = (string)$courselistitem;
-                $semesterdata[$semesterid][$acalogcourseid]["before"][] = $aftercourse;
-              }
+          
+          
+  
+          
+            /*save the semester name and credit hours*/
+            //sometimes, the catalog folks put the notes section in a core semester element. 
+            //Let's ignore those for now. We need to finish this project this year.
+            if ($semester !== "Note") {
+              $semesterdata[$semesterid]["name"] = $semester;
+              $semesterdata[$semesterid]["credithours"] = $semestercredithours;
             }
-            //dpm($semesterdata);
-          }
-          
-          
-          //if the position is right
-          if ((string)$adhoc["position"] == "right") {
-            $adhoctitle = (string)$adhoc->children('a', true)->title;
-            $acalogcourseid = (string)$adhoc['course'];
-            $semesterdata[$semesterid][$acalogcourseid]["right"][] = $adhoctitle;
-          }
-          
-          $licourse = "";
-          //if the position is after
-          if ((string)$adhoc["position"] == "after") {
-            $adhoctitle = (string)$adhoc->children('a', true)->title;
-            $acalogcourseid = (string)$adhoc['course'];
-            //Usually, the courses are listed in a ul>li structure.
-            if ($adhoc->children('a', true)->content->children('h', true)->ul->li){
-              foreach ($adhoc->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
+            //get the xi courses
+            foreach ($semesters->courses->children('xi', true)->{'include'} as $course) {
+              $coursetitle = (string)$course->fallback->children('a', true)->title;
+              $coursepointer = (string)$course['xpointer'];
+              $acalognumberstart = strpos($coursepointer, "acalog-course-");
+              $acalognumberend = strpos($coursepointer, "'", $acalognumberstart);
+              $acalogcourseid = substr($coursepointer, $acalognumberstart, $acalognumberend-$acalognumberstart);
+              $semesterdata[$semesterid][$acalogcourseid]["coursetitle"] = $coursetitle;
+            }
+            
+            //on rare occasions, the courses are listed in the content region (without an adhoc parent)
+            if ($semesters->children('a', true)->content->children('h', true)->ul->li){
+              foreach ($semesters->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
                 $aftercourse = (string)$courselistitem;
+                //$semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
                 $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
               }
             }
-            //sometimes, the courses are listed in a p tag.
-            if ($adhoc->children('a', true)->content->children('h', true)->p){
-              foreach ($adhoc->children('a', true)->content->children('h', true)->p as $courselistitem) {
-                $aftercourse = (string)$courselistitem;
-                $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
+            
+            
+            //add the adhoc course to the semesterdata array
+            foreach ($semesters->courses->adhoc as $adhoc) {
+              
+              $licourse = "";
+              //if the position is before
+              if ((string)$adhoc["position"] == "before") {
+                $adhoctitle = (string)$adhoc->children('a', true)->title;
+                $acalogcourseid = (string)$adhoc['course'];
+                //Usually, the courses are listed in a ul>li structure.
+                if ($adhoc->children('a', true)->content->children('h', true)->ul->li){
+                  foreach ($adhoc->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
+                    $aftercourse = (string)$courselistitem;
+                    $semesterdata[$semesterid][$acalogcourseid]["before"][] = $aftercourse;
+                  }
+                }
+                //sometimes, the courses are listed in a p tag.
+                if ($adhoc->children('a', true)->content->children('h', true)->p){
+                  foreach ($adhoc->children('a', true)->content->children('h', true)->p as $courselistitem) {
+                    $aftercourse = (string)$courselistitem;
+                    $semesterdata[$semesterid][$acalogcourseid]["before"][] = $aftercourse;
+                  }
+                }
+                //dpm($semesterdata);
+              }
+              
+              
+              //if the position is right
+              if ((string)$adhoc["position"] == "right") {
+                $adhoctitle = (string)$adhoc->children('a', true)->title;
+                $acalogcourseid = (string)$adhoc['course'];
+                $semesterdata[$semesterid][$acalogcourseid]["right"][] = $adhoctitle;
+              }
+              
+              $licourse = "";
+              //if the position is after
+              if ((string)$adhoc["position"] == "after") {
+                $adhoctitle = (string)$adhoc->children('a', true)->title;
+                $acalogcourseid = (string)$adhoc['course'];
+                //Usually, the courses are listed in a ul>li structure.
+                if ($adhoc->children('a', true)->content->children('h', true)->ul->li){
+                  foreach ($adhoc->children('a', true)->content->children('h', true)->ul->li as $courselistitem) {
+                    $aftercourse = (string)$courselistitem;
+                    $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
+                  }
+                }
+                //sometimes, the courses are listed in a p tag.
+                if ($adhoc->children('a', true)->content->children('h', true)->p){
+                  foreach ($adhoc->children('a', true)->content->children('h', true)->p as $courselistitem) {
+                    $aftercourse = (string)$courselistitem;
+                    $semesterdata[$semesterid][$acalogcourseid]["after"][] = $aftercourse;
+                  }
+                }
               }
             }
           }
@@ -746,13 +788,27 @@ function _course_catalog_program_pos_CONTENT($program) {
 
   return $output;
 }
+
+
 /**
-* scrub the output of course titles for bracketed crap.
+* helper function to scrub the output of course titles for bracketed crap.
 */
 function scrub_course_title($title) {
   $output = preg_replace('/[\[{\(].*[\]}\)]/U' , '', $title);
   return $output;
 }
+
+
+/**
+* helper function to always return a numeric value.
+*/
+function get_numeric($val) { 
+  if (is_numeric($val)) { 
+    return $val + 0; 
+  } 
+  return 0; 
+} 
+
 
 /**
 * Get the course data and return HTML
@@ -786,9 +842,11 @@ function _course_catalog_course_data_CONTENT($course) {
   $courseprefix = (string)$xml->courses->course->children('a', true)->content->children('', true)->prefix;
   $coursecode = (string)$xml->courses->course->children('a', true)->content->children('', true)->code;
   $coursename = (string)$xml->courses->course->children('a', true)->content->children('', true)->name;
+  $coursedescription = "";
   $i=0;
   foreach ( $xml->courses->course->children('a', true)->content->children('', true)->field as $field ) {
-    if ( (string)$field['type'] == 'acalog-field-115') {
+    $descriptionexists = count($field->data->children('h', true)->p);
+    if ( $descriptionexists == 1) {
       $coursedescription = (string)$field->data->children('h', true)->p;
       break;
     }
