@@ -837,7 +837,7 @@ function _course_catalog_course_data_CONTENT($course) {
 
   /*set up the XML source so we can access the values*/
   $xml = new SimpleXMLElement($sXML); //make the xml a simpleXML element
-  
+
   /* save the variables we'll need for the output*/
   $courseprefix = (string)$xml->courses->course->children('a', true)->content->children('', true)->prefix;
   $coursecode = (string)$xml->courses->course->children('a', true)->content->children('', true)->code;
@@ -852,13 +852,24 @@ function _course_catalog_course_data_CONTENT($course) {
     }
     $i = $i+1;
   }
-  $coursedepartment = (string)$xml->hierarchy->entity->children('a', true)->title;
+  /*if (isset($xml->hierarchy->entity->children('a', true)->title)) {
+    $coursedepartment = (string)$xml->hierarchy->entity->children('a', true)->title;
+  } else {
+    $coursedepartment = "none";
+  }*/
+  $titlecount = count($xml->hierarchy->entity);
+  if ($titlecount > 0) {
+     $coursedepartment = "This course is offered by the " . (string)$xml->hierarchy->entity->children('a', true)->title;
+  } else {
+      $coursedepartment = "The current course catalog does not include data about this course.";
+  }
+  
   
   /*build the html output for the block contents*/
   $output = "<h1>" . $courseprefix . " " . $coursecode . "</h1>";
   $output = $output . "<h2>" . $coursename . "</h2>";
   $output = $output . "<p>" . $coursedescription . "</p>";
-  $output = $output . "<p>This course is offered by the " . $coursedepartment . "</p>";
+  $output = $output . "<p>" . $coursedepartment . "</p>";
   
   return $output;
 }
