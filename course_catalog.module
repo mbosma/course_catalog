@@ -370,9 +370,11 @@ function _course_catalog_required_courses_CONTENT($program) {
     if ($corecount >0) {
 
       foreach ($xml->programs->program->cores->core as $core) {
+				
         $coretitle = -1;
         $coretitle = (string)$core->children('a', true)->title;
         $corepos = strpos($coretitle, "Major Courses");
+				$corepos = $corepos + strpos($coretitle, "Major Required Courses");
         if (is_int($corepos) > 0) {
           foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
             $coursepointer = (string)$courses['xpointer'];
@@ -419,23 +421,43 @@ function _course_catalog_required_courses_CONTENT($program) {
       if ($childrencount > 0){
         foreach( $xml->programs->program->cores->core as $coretest){
           $corechildcount = count($coretest->children->core);
+
           if ($corechildcount > 0) {
             $core = $coretest->children->core;          
             // Very inconsistent data structures on this one. Uses courses that are identified as:
             //  - Major Courses, Required Department courses, or Concentration Courses
+
             if (strpos((string)$core->children('a', true)->title, "Major Courses") !== false || 
             strpos((string)$core->children('a', true)->title, "Required Department Courses") !== false || 
               strpos((string)$core->children('a', true)->title, "Concentration Courses") !== false) {
-
-              foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
-                $coursepointer = (string)$courses['xpointer'];
-                $acalognumberstart = strpos($coursepointer, "'acalog-course-");
-                $acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
-                $acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
-                $course[$acalogcourseid]['courseid'] = $acalogcourseid;
-                $course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
-                $x = $x + 1; 
-              }
+							
+							
+							//test to see if this condition is met. If not, use the next for..each
+							
+							$nestedcount = count($core->children->core);
+							if ($nestedcount > 0) {
+								//get the core>children>core>courses>children version
+								foreach( $core->children->core->courses->children('xi', true)->{'include'} as $courses) {
+									$coursepointer = (string)$courses['xpointer'];
+									$acalognumberstart = strpos($coursepointer, "'acalog-course-");
+									$acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+									$acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+									$course[$acalogcourseid]['courseid'] = $acalogcourseid;
+									$course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
+									$x = $x + 1; 
+								}
+							} else {
+								//get the core>courses>children version
+								foreach( $core->courses->children('xi', true)->{'include'} as $courses) {
+									$coursepointer = (string)$courses['xpointer'];
+									$acalognumberstart = strpos($coursepointer, "'acalog-course-");
+									$acalognumberend = strpos($coursepointer, "'", $acalognumberstart+1);
+									$acalogcourseid = substr($coursepointer, $acalognumberstart+15, $acalognumberend-$acalognumberstart-15);
+									$course[$acalogcourseid]['courseid'] = $acalogcourseid;
+									$course[$acalogcourseid]['coursename'] = (string)$courses->fallback->children('a', true)->title;
+									$x = $x + 1; 
+								}
+							}
             }
           }
         }
