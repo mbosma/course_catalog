@@ -35,7 +35,7 @@ For plan of study and required major courses:
  • degree "courses" node is a child of the degree node.
 
 Next steps: 
-Summer 2017: Because of the complex and inconsistent data structure created by the registrar while imputing data, this will be converted to a extension/submodule of the XML Feeds module.
+Spring 2018: Convert project to lookup programs by name and return content instead of using PIDs. PIDs change every year.
 
 Contact for implementation assistance:
 Matt Bosma
